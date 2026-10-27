@@ -19,14 +19,19 @@ curl http://localhost:8080/healthz
 
 Остановить и удалить данные: `docker compose down -v`.
 
-### Локальный запуск без Docker для приложения
+### Локальный запуск приложения без Docker
+
+MySQL и Redis в compose публикуют порты на `127.0.0.1` (`MYSQL_PORT`, `REDIS_PORT` из `.env`),
+значения из `.env.example` уже указывают на них.
 
 ```bash
+cp .env.example .env
 docker compose up -d mysql redis
-# в .env выставить MYSQL_USER/MYSQL_PASSWORD и пробросить порты MySQL/Redis, либо задать MYSQL_DSN
 set -a; source .env; set +a
 go run ./cmd/server
 ```
+
+Если порты 3306/6379 заняты, поменяйте `MYSQL_PORT`, `REDIS_PORT` и `REDIS_ADDR` в `.env`.
 
 ## Конфигурация
 
@@ -36,10 +41,11 @@ go run ./cmd/server
 |---|---|---|
 | `HTTP_ADDR` | `:8080` | Адрес HTTP-сервера |
 | `APP_PORT` | `8080` | Порт на хосте в docker compose |
-| `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` | `localhost`, `3306`, `taskservice`, `root`, - | Подключение к MySQL |
+| `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` | `localhost`, `3306`, `taskservice`, `root`, - | Подключение к MySQL. `MYSQL_PORT` также порт MySQL на хосте в compose |
 | `MYSQL_DSN` | - | Полный DSN, если задан, перекрывает поля выше |
 | `MYSQL_ROOT_PASSWORD` | - | Пароль root для контейнера MySQL |
 | `REDIS_ADDR`, `REDIS_PASSWORD`, `REDIS_DB` | `localhost:6379`, -, `0` | Подключение к Redis |
+| `REDIS_PORT` | `6379` | Порт Redis на хосте в compose |
 | `CACHE_TTL` | `5m` | TTL кеша списка задач |
 | `JWT_SECRET` | **обязательно** | Секрет подписи JWT (HS256) |
 | `JWT_TTL` | `24h` | Время жизни токена |
@@ -57,11 +63,16 @@ SQL-миграции лежат в [`migrations/`](migrations) и встроен
 
 ```bash
 go test ./...                                   # unit-тесты прав доступа
-docker compose --profile test run --rm tests    # + интеграционный тест SQL-отчёта на MySQL
+docker compose --profile test run --rm tests    # все тесты, включая интеграционный тест SQL-отчёта на MySQL
 ```
 
 Интеграционный тест (`internal/store/stats_integration_test.go`) использует отдельную БД
-`taskservice_test` и пропускается, если не задан `TEST_MYSQL_DSN`.
+`taskservice_test` (создаётся при первой инициализации MySQL) и пропускается, если не задан `TEST_MYSQL_DSN`.
+Запуск с хоста при поднятом `docker compose up -d mysql`:
+
+```bash
+TEST_MYSQL_DSN='root:<MYSQL_ROOT_PASSWORD>@tcp(127.0.0.1:3306)/taskservice_test?parseTime=true&loc=UTC' go test ./internal/store/...
+```
 
 ## Примеры запросов
 
